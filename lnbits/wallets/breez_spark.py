@@ -26,7 +26,7 @@ else:
         Payment,
         PaymentDetails,
         PaymentMethod,
-        PaymentState,
+        PaymentStatus as BreezPaymentStatus,
         PaymentType,
         PrepareReceiveRequest,
         PrepareSendRequest,
@@ -258,6 +258,8 @@ else:
                     ok=False, error_message=f"Invalid BOLT11 invoice: {exc}"
                 )
 
+            checking_id = invoice_data.payment_hash
+
             try:
                 # Prepare payment to calculate fees
                 prepare_req = PrepareSendRequest(destination=bolt11)
@@ -276,23 +278,24 @@ else:
                         ),
                     )
 
-                # Execute payment
+                # Execute payment (create queue before payment to avoid race condition)
+                breez_spark_outgoing_queue[checking_id] = Queue()
                 send_response = self.sdk_services.send_payment(
                     SendPaymentRequest(prepare_response=req)
                 )
 
             except Exception as exc:
                 logger.warning(f"Exception while paying invoice: {exc}")
+                breez_spark_outgoing_queue.pop(checking_id, None)
                 return PaymentResponse(error_message=f"Exception while payment: {exc}")
 
             payment: Payment = send_response.payment
             logger.debug(f"Breez Spark pay invoice result: {payment}")
-            checking_id = invoice_data.payment_hash
 
             fees = req.fees_sat * 1000 if req.fees_sat and req.fees_sat > 0 else 0
 
             # If payment is not immediately complete, wait for confirmation
-            if payment.status != PaymentState.COMPLETE:
+            if payment.status != BreezPaymentStatus.COMPLETE:
                 return await self._wait_for_outgoing_payment(checking_id, fees, 10)
 
             # Verify payment details are available
@@ -326,13 +329,21 @@ else:
                     return PaymentPendingStatus()
 
                 if payment.payment_type != PaymentType.RECEIVE:
-                    logger.warning(f"unexpected payment type: {payment.payment_type}")
-                    return PaymentPendingStatus()
+                    if payment.payment_type == PaymentType.SEND:
+                        logger.warning(
+                            f"checking invoice status for a SENT payment: {checking_id}"
+                        )
+                        return PaymentFailedStatus(
+                            "payment hash is for an outgoing payment"
+                        )
 
-                if payment.status == PaymentState.FAILED:
+                    logger.warning(f"unexpected payment type: {payment.payment_type}")
+                    return PaymentFailedStatus(f"unexpected payment type: {payment.payment_type}")
+
+                if payment.status == BreezPaymentStatus.FAILED:
                     return PaymentFailedStatus()
 
-                if payment.status == PaymentState.COMPLETE and isinstance(
+                if payment.status == BreezPaymentStatus.COMPLETE and isinstance(
                     payment.details, PaymentDetails.LIGHTNING
                 ):
                     return PaymentSuccessStatus(
@@ -367,7 +378,7 @@ else:
                     logger.warning(f"unexpected payment type: {payment.payment_type}")
                     return PaymentPendingStatus()
 
-                if payment.status == PaymentState.COMPLETE:
+                if payment.status == BreezPaymentStatus.COMPLETE:
                     if not isinstance(payment.details, PaymentDetails.LIGHTNING):
                         logger.warning("payment details are not of type LIGHTNING")
                         return PaymentPendingStatus()
@@ -376,7 +387,7 @@ else:
                         preimage=payment.details.preimage,
                     )
 
-                if payment.status == PaymentState.FAILED:
+                if payment.status == BreezPaymentStatus.FAILED:
                     return PaymentFailedStatus()
 
                 return PaymentPendingStatus()
@@ -414,7 +425,7 @@ else:
 
             Args:
                 checking_id: The payment hash to wait for.
-                fees: Expected fees in millisats.
+                fees: Expected fees in millisats (used only for timeout case).
                 timeout: Maximum seconds to wait.
 
             Returns:
@@ -422,7 +433,6 @@ else:
             """
             logger.debug(f"waiting for outgoing payment {checking_id} to complete")
             try:
-                breez_spark_outgoing_queue[checking_id] = Queue()
                 payment_details = await asyncio.wait_for(
                     breez_spark_outgoing_queue[checking_id].get(), timeout
                 )
@@ -430,7 +440,7 @@ else:
                     ok=True,
                     preimage=payment_details.preimage,
                     checking_id=checking_id,
-                    fee_msat=fees,
+                    fee_msat=payment_details.fees_sat * 1000,
                 )
             except asyncio.TimeoutError:
                 logger.debug(
