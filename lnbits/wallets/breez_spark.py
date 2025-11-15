@@ -328,15 +328,17 @@ else:
                 if payment is None:
                     return PaymentPendingStatus()
 
-                if payment.payment_type == PaymentType.SEND:
-                    logger.warning(
-                        f"checking invoice status for a SENT payment: {checking_id}"
-                    )
-                    return PaymentFailedStatus("payment hash is for an outgoing payment")
-
                 if payment.payment_type != PaymentType.RECEIVE:
+                    if payment.payment_type == PaymentType.SEND:
+                        logger.warning(
+                            f"checking invoice status for a SENT payment: {checking_id}"
+                        )
+                        return PaymentFailedStatus(
+                            "payment hash is for an outgoing payment"
+                        )
+
                     logger.warning(f"unexpected payment type: {payment.payment_type}")
-                    return PaymentPendingStatus()
+                    return PaymentFailedStatus(f"unexpected payment type: {payment.payment_type}")
 
                 if payment.status == BreezPaymentStatus.FAILED:
                     return PaymentFailedStatus()
