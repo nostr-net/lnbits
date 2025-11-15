@@ -597,6 +597,11 @@ class BreezLiquidSdkFundingSource(LNbitsSettings):
     breez_liquid_fee_offset_sat: int = Field(default=50)
 
 
+class BreezSparkSdkFundingSource(LNbitsSettings):
+    breez_spark_api_key: str | None = Field(default=None)
+    breez_spark_seed: str | None = Field(default=None)
+
+
 class BoltzFundingSource(LNbitsSettings):
     boltz_client_endpoint: str | None = Field(default="127.0.0.1:9002")
     boltz_client_macaroon: str | None = Field(default=None)
@@ -668,6 +673,7 @@ class FundingSourcesSettings(
     BreezSdkFundingSource,
     StrikeFundingSource,
     BreezLiquidSdkFundingSource,
+    BreezSparkSdkFundingSource,
 ):
     lnbits_backend_wallet_class: str = Field(default="VoidWallet")
     # How long to wait for the payment to be confirmed before returning a pending status
@@ -976,6 +982,7 @@ class SuperUserSettings(LNbitsSettings):
             "BlinkWallet",
             "BreezSdkWallet",
             "BreezLiquidSdkWallet",
+            "BreezSparkSdkWallet",
             "CLNRestWallet",
             "CoreLightningRestWallet",
             "CoreLightningWallet",
