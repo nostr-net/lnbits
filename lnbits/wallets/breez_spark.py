@@ -116,13 +116,12 @@ else:
                 breez_api_key=settings.breez_spark_api_key or "",
             )
 
-            # Set private mode to prevent public node announcements
-            self.config.private_mode = settings.breez_spark_private_mode
+            # Always use private mode to prevent public node announcements
+            # Private mode keeps balance & transactions hidden from public explorers
+            self.config.private_mode = True
 
             # Create working directory for SDK data
-            breez_sdk_working_dir = Path(
-                settings.lnbits_data_folder, "breez-spark-sdk"
-            )
+            breez_sdk_working_dir = Path(settings.lnbits_data_folder, "breez-spark-sdk")
             breez_sdk_working_dir.mkdir(parents=True, exist_ok=True)
             self.config.working_dir = breez_sdk_working_dir.absolute().as_posix()
 
@@ -158,7 +157,8 @@ else:
             Get the current wallet status and balance.
 
             Returns:
-                StatusResponse: Contains error message (if any) and balance in millisats.
+                StatusResponse: Contains error message (if any) and balance in
+                    millisats.
             """
             try:
                 info: GetInfoResponse = self.sdk_services.get_info()
@@ -167,7 +167,9 @@ else:
                 return StatusResponse(None, balance_msat)
             except Exception as exc:
                 logger.warning(f"Failed to get Breez Spark status: {exc}")
-                return StatusResponse(f"Failed to connect to breez spark, got: '{exc}...'", 0)
+                return StatusResponse(
+                    f"Failed to connect to breez spark, got: '{exc}...'", 0
+                )
 
         async def create_invoice(
             self,
@@ -183,8 +185,10 @@ else:
             Args:
                 amount: Amount to receive in satoshis.
                 memo: Optional description for the invoice.
-                description_hash: Optional hash of the description (not fully supported).
-                unhashed_description: Optional unhashed description for description_hash.
+                description_hash: Optional hash of the description (not fully
+                    supported).
+                unhashed_description: Optional unhashed description for
+                    description_hash.
 
             Returns:
                 InvoiceResponse: Contains the invoice details or error message.

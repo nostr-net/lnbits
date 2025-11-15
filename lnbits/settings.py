@@ -600,7 +600,6 @@ class BreezLiquidSdkFundingSource(LNbitsSettings):
 class BreezSparkSdkFundingSource(LNbitsSettings):
     breez_spark_api_key: str | None = Field(default=None)
     breez_spark_seed: str | None = Field(default=None)
-    breez_spark_private_mode: bool = Field(default=True)
 
 
 class BoltzFundingSource(LNbitsSettings):
